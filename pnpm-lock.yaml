@@ -10,7 +10,7 @@ importers:
 
   apps/admin:
     dependencies:
-      '@asass/ui':
+      '@asaas/ui':
         specifier: workspace:*
         version: link:../../packages/ui
       '@tailwindcss/vite':
@@ -65,7 +65,7 @@ importers:
 
   apps/web:
     dependencies:
-      '@asass/ui':
+      '@asaas/ui':
         specifier: workspace:*
         version: link:../../packages/ui
       '@tailwindcss/vite':

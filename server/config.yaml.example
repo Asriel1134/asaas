@@ -1,0 +1,33 @@
+server:
+  mode: release
+  host: 0.0.0.0
+  port: 8080
+  timezone: UTC+8
+
+database:
+  host: localhost
+  port: 5432
+  username: postgres
+  password: postgres
+  database: postgres
+  pool:
+    max_conns: 30
+    min_conns: 0
+    max_lifetime: 15m
+    max_idle_time: 5m
+
+redis:
+  addr: localhost:6379
+  password: ""
+  db: 0
+  protocol: 2
+  pool:
+    size: 10
+
+logger:
+  level: info
+  file:
+    max_size: 100
+    max_backups: 10
+    max_age: 30
+    compress: true

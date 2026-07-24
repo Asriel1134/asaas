@@ -1,10 +1,10 @@
 import * as React from "react"
-import { cva, type VariantProps } from "class-variance-authority"
-import { Slot } from "radix-ui"
+import {cva, type VariantProps} from "class-variance-authority"
+import {Slot} from "radix-ui"
 
-import { cn } from "../../lib/utils";
+import {cn} from "../../lib/utils"
 
-function BubbleGroup({ className, ...props }: React.ComponentProps<"div">) {
+function BubbleGroup({className, ...props}: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="bubble-group"
@@ -42,30 +42,30 @@ const bubbleVariants = cva(
 )
 
 function Bubble({
-  variant = "default",
-  align = "start",
-  className,
-  ...props
-}: React.ComponentProps<"div"> &
+                  variant = "default",
+                  align = "start",
+                  className,
+                  ...props
+                }: React.ComponentProps<"div"> &
   VariantProps<typeof bubbleVariants> & {
-    align?: "start" | "end"
-  }) {
+  align?: "start" | "end"
+}) {
   return (
     <div
       data-slot="bubble"
       data-variant={variant}
       data-align={align}
-      className={cn(bubbleVariants({ variant }), className)}
+      className={cn(bubbleVariants({variant}), className)}
       {...props}
     />
   )
 }
 
 function BubbleContent({
-  asChild = false,
-  className,
-  ...props
-}: React.ComponentProps<"div"> & {
+                         asChild = false,
+                         className,
+                         ...props
+                       }: React.ComponentProps<"div"> & {
   asChild?: boolean
 }) {
   const Comp = asChild ? Slot.Root : "div"
@@ -74,7 +74,7 @@ function BubbleContent({
     <Comp
       data-slot="bubble-content"
       className={cn(
-        "w-fit max-w-full min-w-0 overflow-hidden rounded-xl border border-transparent px-3 py-2 text-sm leading-relaxed wrap-break-word group-data-[align=end]/bubble:self-end [button]:text-left [button,a]:transition-colors [button,a]:outline-none [button,a]:focus-visible:border-ring [button,a]:focus-visible:ring-3 [button,a]:focus-visible:ring-ring/50",
+        "w-fit max-w-full min-w-0 overflow-hidden rounded-3xl border border-transparent px-3.5 py-2.5 text-sm leading-relaxed wrap-break-word group-data-[align=end]/bubble:self-end [button]:text-left [button,a]:transition-colors [button,a]:outline-none [button,a]:focus-visible:border-ring [button,a]:focus-visible:ring-3 [button,a]:focus-visible:ring-ring/30",
         className
       )}
       {...props}
@@ -103,11 +103,11 @@ const bubbleReactionsVariants = cva(
 )
 
 function BubbleReactions({
-  side = "bottom",
-  align = "end",
-  className,
-  ...props
-}: React.ComponentProps<"div"> & {
+                           side = "bottom",
+                           align = "end",
+                           className,
+                           ...props
+                         }: React.ComponentProps<"div"> & {
   align?: "start" | "end"
   side?: "top" | "bottom"
 }) {
@@ -116,10 +116,10 @@ function BubbleReactions({
       data-slot="bubble-reactions"
       data-align={align}
       data-side={side}
-      className={cn(bubbleReactionsVariants({ side, align }), className)}
+      className={cn(bubbleReactionsVariants({side, align}), className)}
       {...props}
     />
   )
 }
 
-export { BubbleGroup, Bubble, BubbleContent, BubbleReactions }
+export {BubbleGroup, Bubble, BubbleContent, BubbleReactions}

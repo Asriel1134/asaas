@@ -1,8 +1,8 @@
 import * as React from "react"
 
-import { cn } from "../../lib/utils"
+import {cn} from "../../lib/utils"
 
-function MessageGroup({ className, ...props }: React.ComponentProps<"div">) {
+function MessageGroup({className, ...props}: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="message-group"
@@ -13,10 +13,10 @@ function MessageGroup({ className, ...props }: React.ComponentProps<"div">) {
 }
 
 function Message({
-  className,
-  align = "start",
-  ...props
-}: React.ComponentProps<"div"> & { align?: "start" | "end" }) {
+                   className,
+                   align = "start",
+                   ...props
+                 }: React.ComponentProps<"div"> & { align?: "start" | "end" }) {
   return (
     <div
       data-slot="message"
@@ -30,7 +30,7 @@ function Message({
   )
 }
 
-function MessageAvatar({ className, ...props }: React.ComponentProps<"div">) {
+function MessageAvatar({className, ...props}: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="message-avatar"
@@ -43,7 +43,7 @@ function MessageAvatar({ className, ...props }: React.ComponentProps<"div">) {
   )
 }
 
-function MessageContent({ className, ...props }: React.ComponentProps<"div">) {
+function MessageContent({className, ...props}: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="message-content"
@@ -56,12 +56,12 @@ function MessageContent({ className, ...props }: React.ComponentProps<"div">) {
   )
 }
 
-function MessageHeader({ className, ...props }: React.ComponentProps<"div">) {
+function MessageHeader({className, ...props}: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="message-header"
       className={cn(
-        "flex max-w-full min-w-0 items-center px-3 text-xs font-medium text-muted-foreground group-has-data-[variant=ghost]/message:px-0",
+        "flex max-w-full min-w-0 items-center px-3.5 text-xs font-medium text-muted-foreground group-has-data-[variant=ghost]/message:px-0",
         className
       )}
       {...props}
@@ -69,12 +69,12 @@ function MessageHeader({ className, ...props }: React.ComponentProps<"div">) {
   )
 }
 
-function MessageFooter({ className, ...props }: React.ComponentProps<"div">) {
+function MessageFooter({className, ...props}: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="message-footer"
       className={cn(
-        "flex max-w-full min-w-0 items-center px-3 text-xs font-medium text-muted-foreground group-has-data-[variant=ghost]/message:px-0 group-data-[align=end]/message:justify-end",
+        "flex max-w-full min-w-0 items-center px-3.5 text-xs font-medium text-muted-foreground group-has-data-[variant=ghost]/message:px-0 group-data-[align=end]/message:justify-end",
         className
       )}
       {...props}
