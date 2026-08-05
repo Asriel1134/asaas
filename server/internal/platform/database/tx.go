@@ -4,17 +4,10 @@ import (
 	"context"
 	"fmt"
 
+	"asriel.cn/asaas/server/internal/pkg/access"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
-
-type access struct {
-	UserID      uuid.UUID
-	TenantID    uuid.UUID
-	MemberID    uuid.UUID
-	WorkspaceID uuid.UUID
-	SessionID   uuid.UUID
-}
 
 func Tx[T any](ctx context.Context, f func(tx pgx.Tx) (T, error)) (T, error) {
 	var zero T
@@ -29,15 +22,16 @@ func Tx[T any](ctx context.Context, f func(tx pgx.Tx) (T, error)) (T, error) {
 		_ = tx.Rollback(ctx)
 	}()
 
-	acc := getAccess(ctx)
-
-	_, err = tx.Exec(
-		ctx,
-		`SELECT set_config('app.tenant_id', $1, true)`,
-		acc.TenantID.String(),
-	)
-	if err != nil {
-		return zero, fmt.Errorf("failed to set tenant context: %w", err)
+	acc, ok := access.Get(ctx)
+	if ok && acc.TenantID != uuid.Nil {
+		_, err = tx.Exec(
+			ctx,
+			`SELECT set_config('app.tenant_id', $1, true)`,
+			acc.TenantID.String(),
+		)
+		if err != nil {
+			return zero, fmt.Errorf("failed to set tenant context: %w", err)
+		}
 	}
 
 	result, err := f(tx)
@@ -50,8 +44,4 @@ func Tx[T any](ctx context.Context, f func(tx pgx.Tx) (T, error)) (T, error) {
 	}
 
 	return result, nil
-}
-
-func getAccess(ctx context.Context) *access {
-	return &access{}
 }

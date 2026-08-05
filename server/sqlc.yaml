@@ -3,11 +3,10 @@ version: "2"
 sql:
   - engine: "postgresql"
     schema: &schema "migrations"
-    queries: "internal/modules/iam/db/queries.sql"
+    queries: "internal/modules/iam/db"
 
     gen:
       go: &go_opts
-        package: user
         out: "internal/modules/iam/db/sqlc"
         sql_package: "pgx/v5"
 
@@ -25,12 +24,3 @@ sql:
             go_type: &time_type
               import: "time"
               type: "Time"
-
-#  - engine: "postgresql"
-#    schema: *schema
-#    queries: "internal/modules/business/db/queries.sql"
-#    gen:
-#      go:
-#        <<: *go_opts
-#        package: "role"
-#        out: "internal/modules/business/db/sqlc"

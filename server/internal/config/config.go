@@ -79,8 +79,8 @@ var Config = Configuration{
 		Password: "postgres",
 		Database: "postgres",
 		Pool: DatabasePool{
-			MaxOpen:     25,
-			MaxIdle:     10,
+			MaxConns:    25,
+			MinConns:    0,
 			MaxLifetime: 15 * time.Minute,
 			MaxIdleTime: 5 * time.Minute,
 		},

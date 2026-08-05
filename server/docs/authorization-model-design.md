@@ -1022,6 +1022,8 @@ erDiagram
     PLANS ||--o{ TENANT_SUBSCRIPTIONS : selected
     TENANTS ||--o{ TENANT_ENTITLEMENTS : overrides
     FEATURE_DEFINITIONS ||--o{ TENANT_ENTITLEMENTS : controls
+    TENANTS ||--o{ TENANT_FEATURE_USAGES : consumes
+    FEATURE_DEFINITIONS ||--o{ TENANT_FEATURE_USAGES : measures
 ```
 
 ### 9.1 `feature_definitions`
@@ -1038,18 +1040,76 @@ sso
 ai
 ```
 
-字段包括：
+定义平台能够售卖、开通、限制或计量的能力。功能编码是稳定自然键，不使用 UUID 主键。
 
-- `code`
-- `name`
-- `description`
-- `value_type`
-- `default_value`
-- `status`
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `code` | text PK | 功能编码，如 `open_api.enabled` |
+| `name` | varchar | 展示名称 |
+| `description` | text | 功能说明 |
+| `category` | varchar | 如 `crm/integration/storage/ai` |
+| `value_type` | enum | `boolean/integer/bytes/count/json` |
+| `default_value` | jsonb | 未在套餐或租户层配置时的默认值 |
+| `value_schema` | jsonb | 值校验 Schema，例如最小值、最大值或 JSON Schema 摘要 |
+| `is_metered` | boolean | 是否需要计量使用量 |
+| `status` | enum | `active/deprecated` |
+| `created_at` | timestamptz | 创建时间 |
+| `updated_at` | timestamptz | 更新时间 |
+
+示例：
+
+| `code` | `value_type` | `default_value` | 语义 |
+| --- | --- | --- | --- |
+| `crm.enabled` | `boolean` | `true` | 是否启用 CRM 模块 |
+| `open_api.enabled` | `boolean` | `false` | 是否可创建开放 API 凭证 |
+| `member.max_count` | `count` | `5` | 可用成员数上限 |
+| `storage.max_bytes` | `bytes` | `1073741824` | 对象存储容量上限 |
+| `crm.export.daily_limit` | `count` | `0` | 每日导出次数上限，`0` 表示不允许 |
+| `ai.monthly_token_limit` | `integer` | `0` | 每月 AI Token 配额 |
+
+`feature_definitions.code` 一经发布不可修改；废弃功能应改为 `deprecated`，不能删除仍被套餐、订阅或审计记录引用的定义。
 
 ### 9.2 `plans` 与 `plan_features`
 
 `plans` 表示套餐，`plan_features` 表示套餐包含的能力和默认限额。
+
+#### `plans`
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `id` | UUID PK | 套餐 ID |
+| `code` | varchar UNIQUE | 稳定套餐编码，如 `starter/pro/enterprise` |
+| `name` | varchar | 展示名称 |
+| `description` | text | 套餐说明 |
+| `billing_cycle` | enum | `monthly/yearly/custom` |
+| `currency` | char(3) | 计价币种，使用 ISO 4217 编码 |
+| `price_minor` | bigint | 最小货币单位价格；实际支付可由计费系统维护 |
+| `version` | integer | 套餐定义版本 |
+| `status` | enum | `draft/active/retired` |
+| `metadata` | jsonb | 面向展示或计费的扩展元数据 |
+| `created_at` | timestamptz | 创建时间 |
+| `updated_at` | timestamptz | 更新时间 |
+
+`retired` 套餐不能被新订阅选择，但历史订阅仍可以引用。
+
+#### `plan_features`
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `plan_id` | UUID FK | 所属套餐 |
+| `feature_code` | text FK | 功能编码 |
+| `value` | jsonb | 此套餐为功能赋予的值或限额 |
+| `is_included` | boolean | 是否包含该功能；`false` 用于显式关闭布尔能力 |
+| `created_at` | timestamptz | 创建时间 |
+| `updated_at` | timestamptz | 更新时间 |
+
+约束：
+
+```text
+PRIMARY KEY(plan_id, feature_code)
+```
+
+`value` 必须与 `feature_definitions.value_type` 和 `value_schema` 匹配。应用服务负责校验，必要时可通过数据库 CHECK 或触发器补充保护。
 
 示例：
 
@@ -1062,11 +1122,116 @@ crm.export.daily_limit = 20
 
 ### 9.3 `tenant_subscriptions`
 
-记录租户当前套餐、有效期和订阅状态。
+记录租户的订阅历史和当前有效套餐；一个租户可以有多条历史订阅，但同一时刻最多一条正常生效的主订阅。
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `id` | UUID PK | 订阅 ID |
+| `tenant_id` | UUID FK | 租户 |
+| `plan_id` | UUID FK | 当前引用的套餐 |
+| `plan_version` | integer | 订阅创建时的套餐版本 |
+| `plan_snapshot` | jsonb | 套餐及功能快照，用于历史对账与续费追溯 |
+| `status` | enum | `trialing/active/past_due/suspended/canceled/expired` |
+| `started_at` | timestamptz | 生效时间 |
+| `current_period_start` | timestamptz | 当前计费周期开始时间 |
+| `current_period_end` | timestamptz | 当前计费周期结束时间 |
+| `cancel_at` | timestamptz nullable | 计划取消时间 |
+| `canceled_at` | timestamptz nullable | 实际取消时间 |
+| `provider` | varchar nullable | 外部计费提供商标识 |
+| `provider_subscription_id` | varchar nullable | 外部订阅 ID |
+| `created_at` | timestamptz | 创建时间 |
+| `updated_at` | timestamptz | 更新时间 |
+
+建议约束：
+
+```text
+UNIQUE(provider, provider_subscription_id)
+```
+
+并使用部分唯一索引约束每个租户最多一条主有效订阅：
+
+```sql
+CREATE UNIQUE INDEX uq_tenant_active_subscription
+ON tenant_subscriptions(tenant_id)
+WHERE status IN ('trialing', 'active', 'past_due', 'suspended');
+```
+
+`past_due` 与 `suspended` 是否继续提供只读服务，由租户状态机和业务策略决定；不能仅以订阅状态替代 `tenants.status`。
 
 ### 9.4 `tenant_entitlements`
 
-用于套餐之外的租户级覆盖，例如试用、商务赠送、临时关闭高风险功能。
+用于套餐之外的租户级覆盖，例如试用、商务赠送、合同特例、临时关闭高风险功能或额度追加。
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `id` | UUID PK | 覆盖记录 ID |
+| `tenant_id` | UUID FK | 租户 |
+| `feature_code` | text FK | 功能编码 |
+| `effect` | enum | `replace/disable` |
+| `value` | jsonb nullable | `replace` 时的最终功能值；`disable` 时为空 |
+| `priority` | integer | 覆盖优先级，数字越大优先级越高 |
+| `source_type` | enum | `trial/contract/manual/incident/migration` |
+| `source_ref` | varchar nullable | 合同、工单或迁移批次标识 |
+| `reason` | text | 覆盖原因 |
+| `effective_from` | timestamptz | 生效时间 |
+| `effective_until` | timestamptz nullable | 失效时间；为空表示长期生效 |
+| `status` | enum | `active/revoked/expired` |
+| `granted_by_user_id` | UUID FK | 授权平台用户 |
+| `revoked_by_user_id` | UUID nullable FK | 撤销平台用户 |
+| `revoked_at` | timestamptz nullable | 撤销时间 |
+| `created_at` | timestamptz | 创建时间 |
+| `updated_at` | timestamptz | 更新时间 |
+
+生效规则：选择当前时间有效且 `status = active` 的最高优先级覆盖记录。`disable` 永远使功能不可用；`replace` 覆盖套餐中的对应功能值。
+
+建议索引：
+
+```sql
+CREATE INDEX idx_tenant_entitlements_effective
+ON tenant_entitlements(tenant_id, feature_code, priority DESC)
+WHERE status = 'active';
+```
+
+### 9.5 `tenant_feature_usages`
+
+记录需要配额控制的功能使用量。它不是实时限流的唯一来源：高频计数可以在 Redis 中完成，数据库表用于持久化、对账、恢复和管理后台展示。
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `tenant_id` | UUID FK | 租户 |
+| `feature_code` | text FK | 计量功能编码 |
+| `period_start` | timestamptz | 计量周期开始时间 |
+| `period_end` | timestamptz | 计量周期结束时间 |
+| `usage_value` | bigint | 已消耗数量，如成员数、字节数、Token 数或导出次数 |
+| `updated_at` | timestamptz | 最近更新时间 |
+
+约束：
+
+```text
+PRIMARY KEY(tenant_id, feature_code, period_start)
+CHECK(usage_value >= 0)
+CHECK(period_end > period_start)
+```
+
+示例：
+
+- `member.max_count`：可使用长期或当前订阅周期的成员数量快照。
+- `crm.export.daily_limit`：按自然日或租户时区日生成周期。
+- `ai.monthly_token_limit`：按订阅计费周期或自然月生成周期。
+- `storage.max_bytes`：可使用长期周期，或由对象存储聚合任务定期校准。
+
+### 9.6 功能值解析优先级
+
+对任意 `tenant_id + feature_code`，最终生效值按以下顺序得到：
+
+```text
+有效 tenant_entitlements（最高 priority）
+    > 当前有效 tenant_subscriptions 的 plan_snapshot
+    > 当前套餐 plan_features
+    > feature_definitions.default_value
+```
+
+订阅快照用于历史一致性；如果产品要求套餐变更立即影响全部订阅，则可以显式配置为优先读取 `plan_features`，但该行为必须留审计记录。
 
 授权判断必须满足：
 

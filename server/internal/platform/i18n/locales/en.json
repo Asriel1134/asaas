@@ -1,0 +1,29 @@
+{
+  "iam": {
+    "tenant": {
+      "invalid_param": "Invalid parameter",
+      "create_failed": "Failed to create tenant",
+      "invite_failed": "Failed to invite member",
+      "already_member": "User is already a member of this tenant",
+      "disable_member_failed": "Failed to disable member",
+      "remove_member_failed": "Failed to remove member"
+    },
+    "login": {
+      "invalid_kind": "Invalid identifier type",
+      "invalid_credentials": "Invalid credentials",
+      "login_failed": "Login failed, please try again later",
+      "password_not_set": "Password not set, use SSO or reset your password",
+      "account_locked": "Account is locked, please contact support",
+      "account_deleted": "Account has been deleted",
+      "must_change_password": "Password change required, please update your password",
+      "invalid_tenant": "Invalid tenant",
+      "tenant_already_set": "Tenant already selected",
+      "logout_failed": "Logout failed"
+    }
+  },
+  "authorization": {
+    "session_invalid": "Session is invalid, please login again",
+    "unauthorized": "Unauthorized",
+    "member_inactive": "Tenant member is disabled or removed"
+  }
+}
