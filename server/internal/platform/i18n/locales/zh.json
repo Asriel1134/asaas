@@ -18,7 +18,8 @@
       "must_change_password": "需要修改密码，请更新您的密码",
       "invalid_tenant": "无效的租户",
       "tenant_already_set": "已选择过租户",
-      "logout_failed": "登出失败"
+      "logout_failed": "登出失败",
+      "platform_entry": "管理平台"
     }
   },
   "authorization": {

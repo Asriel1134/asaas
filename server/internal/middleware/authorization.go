@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"slices"
 
@@ -10,6 +11,7 @@ import (
 	"asriel.cn/asaas/server/internal/platform/i18n"
 	"asriel.cn/asaas/server/internal/platform/response"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 )
 
 var whitelist = []string{
@@ -55,8 +57,15 @@ func Authorization() gin.HandlerFunc {
 		if session.TenantHint.Valid {
 			acc.TenantID = session.TenantHint.Bytes
 		}
+		if session.DefaultWorkspaceID.Valid {
+			acc.WorkspaceID = session.DefaultWorkspaceID.Bytes
+		}
 
 		c.Request = c.Request.WithContext(access.Set(c.Request.Context(), acc))
 		c.Next()
 	}
+}
+
+func PermissionCacheKey(tenantID, userID uuid.UUID, tenantVer, memberVer int64) string {
+	return fmt.Sprintf("authz:%s:%s:%d:%d", tenantID, userID, tenantVer, memberVer)
 }

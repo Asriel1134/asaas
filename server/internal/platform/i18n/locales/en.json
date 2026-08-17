@@ -18,7 +18,8 @@
       "must_change_password": "Password change required, please update your password",
       "invalid_tenant": "Invalid tenant",
       "tenant_already_set": "Tenant already selected",
-      "logout_failed": "Logout failed"
+      "logout_failed": "Logout failed",
+      "platform_entry": "Management Platform"
     }
   },
   "authorization": {

@@ -17,9 +17,21 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+type NavigationEntry struct {
+	Type         string     `json:"type"`
+	TenantID     *uuid.UUID `json:"tenant_id,omitempty"`
+	Slug         string     `json:"slug"`
+	Name         string     `json:"name"`
+	TenantStatus string     `json:"tenant_status,omitempty"`
+	MemberStatus string     `json:"member_status,omitempty"`
+	JobTitle     *string    `json:"job_title,omitempty"`
+	EmployeeNo   *string    `json:"employee_no,omitempty"`
+}
+
 type AuthHandler struct {
-	sessionService *service.SessionService
-	userService    *service.UserService
+	sessionService    *service.SessionService
+	userService       *service.UserService
+	permissionService *service.PermissionService
 }
 
 func (handler *AuthHandler) Register(g *gin.RouterGroup) {
@@ -110,7 +122,41 @@ func (handler *AuthHandler) loginByPassword(c *gin.Context) {
 		return
 	}
 
-	response.Success(c, tenants)
+	entries := make([]NavigationEntry, 0, len(tenants))
+	for _, r := range tenants {
+		e := NavigationEntry{
+			Type:         "tenant",
+			Slug:         r.TenantSlug.String,
+			Name:         r.TenantName.String,
+			MemberStatus: string(r.MemberStatus),
+		}
+		if r.TenantID.Valid {
+			id := uuid.UUID(r.TenantID.Bytes)
+			e.TenantID = &id
+		}
+		if r.TenantStatus.Valid {
+			e.TenantStatus = string(r.TenantStatus.TenantsStatus)
+		}
+		if r.JobTitle.Valid {
+			e.JobTitle = &r.JobTitle.String
+		}
+		if r.EmployeeNo.Valid {
+			e.EmployeeNo = &r.EmployeeNo.String
+		}
+		entries = append(entries, e)
+	}
+
+	isPlatformUser, _ := handler.permissionService.IsPlatformUser(c.Request.Context(), i.UserID)
+	if isPlatformUser {
+		platformEntry := NavigationEntry{
+			Type: "platform",
+			Slug: "platform",
+			Name: i18n.T(lang, "iam.login.platform_entry"),
+		}
+		entries = append([]NavigationEntry{platformEntry}, entries...)
+	}
+
+	response.Success(c, entries)
 }
 
 func (handler *AuthHandler) selectTenant(c *gin.Context) {

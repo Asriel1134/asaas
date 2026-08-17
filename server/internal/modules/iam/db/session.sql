@@ -19,7 +19,8 @@ SELECT
     s.revoked_at,
     s.revoke_reason,
     u.security_version AS current_security_version,
-    tm.status AS member_status
+    tm.status AS member_status,
+    tm.default_workspace_id
 FROM sessions s
 JOIN users u ON u.id = s.user_id
 LEFT JOIN tenant_members tm ON tm.tenant_id = s.tenant_hint AND tm.user_id = s.user_id

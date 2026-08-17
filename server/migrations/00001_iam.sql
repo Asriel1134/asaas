@@ -252,6 +252,7 @@ CREATE TABLE IF NOT EXISTS tenant_members (
     status tenant_member_status NOT NULL,
     job_title varchar(64),
     employee_no varchar(64),
+    default_workspace_id uuid,
     authz_version bigint NOT NULL,
     joined_at timestamptz NOT NULL,
     disabled_at timestamptz,
@@ -260,7 +261,8 @@ CREATE TABLE IF NOT EXISTS tenant_members (
     updated_at timestamptz,
     PRIMARY KEY (tenant_id, user_id),
     CONSTRAINT fk_tenant_members_tenant_id FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE ON UPDATE CASCADE,
-    CONSTRAINT fk_tenant_members_user_id FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE ON UPDATE CASCADE
+    CONSTRAINT fk_tenant_members_user_id FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT fk_tenant_members_default_workspace FOREIGN KEY (tenant_id, default_workspace_id) REFERENCES workspaces(tenant_id, id) ON DELETE SET NULL ON UPDATE CASCADE
 );
 COMMENT ON TABLE tenant_members IS '租户成员';
 COMMENT ON COLUMN tenant_members.tenant_id IS '租户ID';
@@ -268,6 +270,7 @@ COMMENT ON COLUMN tenant_members.user_id IS '用户ID';
 COMMENT ON COLUMN tenant_members.status IS '成员状态';
 COMMENT ON COLUMN tenant_members.job_title IS '职位';
 COMMENT ON COLUMN tenant_members.employee_no IS '工号';
+COMMENT ON COLUMN tenant_members.default_workspace_id IS '默认工作区';
 COMMENT ON COLUMN tenant_members.authz_version IS '权限版本';
 COMMENT ON COLUMN tenant_members.joined_at IS '加入时间';
 COMMENT ON COLUMN tenant_members.disabled_at IS '禁用时间';

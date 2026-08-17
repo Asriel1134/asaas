@@ -6,10 +6,10 @@ import (
 	"asriel.cn/asaas/server/internal/config"
 	"asriel.cn/asaas/server/internal/middleware"
 	"asriel.cn/asaas/server/internal/modules/iam/handler"
+	"asriel.cn/asaas/server/internal/platform/cache"
 	"asriel.cn/asaas/server/internal/platform/database"
 	"asriel.cn/asaas/server/internal/platform/i18n"
 	"asriel.cn/asaas/server/internal/platform/logger"
-	"asriel.cn/asaas/server/internal/platform/redis"
 	"github.com/gin-gonic/gin"
 )
 
@@ -22,8 +22,8 @@ func main() {
 	database.Init()
 	defer database.Close()
 
-	redis.Init()
-	defer redis.Close()
+	cache.Init()
+	defer cache.Close()
 
 	i18n.Init()
 
