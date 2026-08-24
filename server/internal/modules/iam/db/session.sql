@@ -20,22 +20,55 @@ SELECT
     s.revoked_at,
     s.revoke_reason,
     u.security_version AS current_security_version,
+    COALESCE(pu.authz_version, 0)::bigint AS platform_user_authz_version,
     tm.status AS member_status,
     tm.default_workspace_id,
-    t.status AS tenant_status
-FROM sessions s
+    t.status AS tenant_status,
+    COALESCE(t.authz_version, 0)::bigint AS tenant_authz_version,
+    COALESCE(tm.authz_version, 0)::bigint AS member_authz_version,
+    ags.permission_catalog_version,
+    ags.platform_authz_version AS platform_global_authz_version,
+    EXISTS (
+        SELECT 1
+        FROM platform_users active_pu
+        WHERE active_pu.user_id = s.user_id
+          AND active_pu.status = 'active'
+    ) AS is_platform_user
+FROM user_sessions s
 JOIN users u ON u.id = s.user_id
+CROSS JOIN global_authz_versions ags
+LEFT JOIN platform_users pu ON pu.user_id = s.user_id
 LEFT JOIN tenant_members tm ON tm.tenant_id = s.context_tenant_id AND tm.user_id = s.user_id
 LEFT JOIN tenants t ON t.id = s.context_tenant_id
 WHERE s.token_hash = $1 AND s.status = 'active';
 
+-- name: GetSessionAuthorizationState :one
+SELECT
+    s.user_id,
+    s.context_type,
+    s.context_tenant_id,
+    tm.default_workspace_id,
+    COALESCE(t.authz_version, 0)::bigint AS tenant_authz_version,
+    COALESCE(tm.authz_version, 0)::bigint AS member_authz_version,
+    COALESCE(pu.authz_version, 0)::bigint AS platform_user_authz_version,
+    ags.permission_catalog_version,
+    ags.platform_authz_version AS platform_global_authz_version
+FROM user_sessions s
+JOIN users u ON u.id = s.user_id
+CROSS JOIN global_authz_versions ags
+LEFT JOIN platform_users pu ON pu.user_id = s.user_id
+LEFT JOIN tenant_members tm ON tm.tenant_id = s.context_tenant_id AND tm.user_id = s.user_id
+LEFT JOIN tenants t ON t.id = s.context_tenant_id
+WHERE s.id = sqlc.arg(sessionID)
+  AND s.status = 'active';
+
 -- name: UpdateSessionLastSeen :exec
-UPDATE sessions
+UPDATE user_sessions
 SET last_seen_at = $2, ip_last = $3, idle_expires_at = $4
 WHERE id = $1;
 
 -- name: SelectTenantContext :execrows
-UPDATE sessions s
+UPDATE user_sessions s
 SET context_type = 'tenant', context_tenant_id = sqlc.arg(tenantID)
 WHERE s.id = sqlc.arg(sessionID)
   AND s.context_type = 'pending'
@@ -50,32 +83,29 @@ WHERE s.id = sqlc.arg(sessionID)
   );
 
 -- name: SelectPlatformContext :execrows
-UPDATE sessions s
+UPDATE user_sessions s
 SET context_type = 'platform', context_tenant_id = NULL
 WHERE s.id = sqlc.arg(sessionID)
   AND s.context_type = 'pending'
   AND EXISTS (
       SELECT 1
-      FROM platform_user_role_bindings purb
-      INNER JOIN platform_roles pr ON pr.id = purb.platform_role_id
-      WHERE purb.user_id = s.user_id
-        AND (purb.valid_from IS NULL OR purb.valid_from <= now())
-        AND (purb.valid_until IS NULL OR purb.valid_until > now())
-        AND pr.status = 'active'
+      FROM platform_users pu
+      WHERE pu.user_id = s.user_id
+        AND pu.status = 'active'
   );
 
 -- name: RevokeSession :exec
-UPDATE sessions
+UPDATE user_sessions
 SET status = 'revoked', revoked_at = now()
 WHERE id = $1 AND status = 'active';
 
 -- name: ExpireSession :exec
-UPDATE sessions
+UPDATE user_sessions
 SET status = 'expired'
 WHERE id = $1 AND status = 'active';
 
 -- name: CreateSession :exec
-INSERT INTO sessions (
+INSERT INTO user_sessions (
     id,
     user_id,
     token_hash,

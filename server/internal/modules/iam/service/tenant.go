@@ -47,11 +47,11 @@ func (*TenantService) CreateTenant(ctx context.Context, slug string, name string
 		queries := sqlc.New(tx)
 
 		if err := queries.CreateTenant(ctx, sqlc.CreateTenantParams{
-			ID:             tenantID,
-			Slug:           slug,
-			Name:           name,
-			CreateByUserID: acc.UserID,
-			CreatedAt:      now,
+			ID:        tenantID,
+			Slug:      slug,
+			Name:      name,
+			CreatedBy: acc.UserID,
+			CreatedAt: now,
 		}); err != nil {
 			return nil, err
 		}
@@ -72,12 +72,15 @@ func (*TenantService) CreateTenant(ctx context.Context, slug string, name string
 }
 
 func (*TenantService) InviteMember(ctx context.Context, tenantID uuid.UUID, userID uuid.UUID) error {
+	if err := validateTenantAccess(ctx, tenantID); err != nil {
+		return err
+	}
 	now := time.Now()
-	err := sqlc.New(database.DB).CreateMember(ctx, sqlc.CreateMemberParams{
-		TenantID:  tenantID,
-		UserID:    userID,
-		JoinedAt:  now,
-		CreatedAt: now,
+	_, err := database.Tx[any](ctx, func(tx pgx.Tx) (any, error) {
+		err := sqlc.New(tx).CreateMember(ctx, sqlc.CreateMemberParams{
+			TenantID: tenantID, UserID: userID, JoinedAt: now, CreatedAt: now,
+		})
+		return nil, err
 	})
 	if err != nil {
 		return ErrAlreadyMember
@@ -86,33 +89,39 @@ func (*TenantService) InviteMember(ctx context.Context, tenantID uuid.UUID, user
 }
 
 func (*TenantService) DisableMember(ctx context.Context, tenantID uuid.UUID, userID uuid.UUID) error {
-	now := time.Now()
-	err := sqlc.New(database.DB).DisableMember(ctx, sqlc.DisableMemberParams{
-		TenantID: tenantID,
-		UserID:   userID,
-		DisabledAt: pgtype.Timestamptz{
-			Time:  now,
-			Valid: true,
-		},
-	})
-	if err != nil {
+	if err := validateTenantAccess(ctx, tenantID); err != nil {
 		return err
 	}
-	return nil
+	now := time.Now()
+	_, err := database.Tx[any](ctx, func(tx pgx.Tx) (any, error) {
+		err := sqlc.New(tx).DisableMember(ctx, sqlc.DisableMemberParams{
+			TenantID: tenantID, UserID: userID,
+			DisabledAt: pgtype.Timestamptz{Time: now, Valid: true},
+		})
+		return nil, err
+	})
+	return err
 }
 
 func (*TenantService) RemoveMember(ctx context.Context, tenantID uuid.UUID, userID uuid.UUID) error {
-	now := time.Now()
-	err := sqlc.New(database.DB).RemoveMember(ctx, sqlc.RemoveMemberParams{
-		TenantID: tenantID,
-		UserID:   userID,
-		RemovedAt: pgtype.Timestamptz{
-			Time:  now,
-			Valid: true,
-		},
-	})
-	if err != nil {
+	if err := validateTenantAccess(ctx, tenantID); err != nil {
 		return err
+	}
+	now := time.Now()
+	_, err := database.Tx[any](ctx, func(tx pgx.Tx) (any, error) {
+		err := sqlc.New(tx).RemoveMember(ctx, sqlc.RemoveMemberParams{
+			TenantID: tenantID, UserID: userID,
+			RemovedAt: pgtype.Timestamptz{Time: now, Valid: true},
+		})
+		return nil, err
+	})
+	return err
+}
+
+func validateTenantAccess(ctx context.Context, tenantID uuid.UUID) error {
+	acc, ok := access.Get(ctx)
+	if !ok || acc.Realm != access.RealmTenant || acc.TenantID != tenantID {
+		return ErrNoAccessContext
 	}
 	return nil
 }

@@ -52,17 +52,37 @@ type Cacheable interface {
 }
 
 func (c *cache) GetOrSet(ctx context.Context, key string, dest Cacheable, ttl time.Duration, loader func() error) error {
-	val, err := c.client.Get(ctx, key).Bytes()
-	if err == nil {
-		return dest.UnmarshalBinary(val)
-	}
-	if !errors.Is(err, redis.Nil) {
+	found, err := c.Get(ctx, key, dest)
+	if err != nil {
 		return err
+	}
+	if found {
+		return nil
 	}
 	if err := loader(); err != nil {
 		return err
 	}
-	data, _ := dest.MarshalBinary()
-	c.client.Set(ctx, key, data, ttl)
-	return nil
+	return c.Set(ctx, key, dest, ttl)
+}
+
+func (c *cache) Get(ctx context.Context, key string, dest Cacheable) (bool, error) {
+	val, err := c.client.Get(ctx, key).Bytes()
+	if errors.Is(err, redis.Nil) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if err := dest.UnmarshalBinary(val); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func (c *cache) Set(ctx context.Context, key string, value Cacheable, ttl time.Duration) error {
+	data, err := value.MarshalBinary()
+	if err != nil {
+		return err
+	}
+	return c.client.Set(ctx, key, data, ttl).Err()
 }

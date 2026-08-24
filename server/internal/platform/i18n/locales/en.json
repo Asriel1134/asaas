@@ -30,6 +30,8 @@
     "unauthorized": "Unauthorized",
     "member_inactive": "Tenant is unavailable or tenant member is disabled or removed",
     "platform_access_denied": "Management platform access has expired",
-    "realm_mismatch": "The current login context cannot access this endpoint"
+    "realm_mismatch": "The current login context cannot access this endpoint",
+    "permission_denied": "Permission denied",
+    "permission_check_failed": "Permission check failed, please try again later"
   }
 }

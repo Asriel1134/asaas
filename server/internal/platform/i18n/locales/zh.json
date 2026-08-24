@@ -30,6 +30,8 @@
     "unauthorized": "未授权访问",
     "member_inactive": "租户不可用，或租户成员已被禁用或移除",
     "platform_access_denied": "管理平台权限已失效",
-    "realm_mismatch": "当前登录上下文无权访问该接口"
+    "realm_mismatch": "当前登录上下文无权访问该接口",
+    "permission_denied": "没有执行该操作的权限",
+    "permission_check_failed": "权限校验失败，请稍后重试"
   }
 }

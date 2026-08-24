@@ -42,8 +42,8 @@
 例如：
 
 - 销售和销售经理都拥有 `crm.customer.read`。
-- 销售的数据范围是 `SELF`。
-- 销售经理的数据范围是 `DEPARTMENT_AND_CHILDREN`。
+- 销售的数据范围是 `self`。
+- 销售经理的数据范围是 `department_and_children`。
 
 ### 2.4 平台与租户安全域分离
 
@@ -252,7 +252,7 @@ UNIQUE(provider_id, provider_subject)
 
 一个第三方身份只能绑定一个平台用户。
 
-### 5.6 `mfa_methods`：多因素认证
+### 5.6 `user_mfa_methods`：多因素认证
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
@@ -268,7 +268,7 @@ UNIQUE(provider_id, provider_subject)
 
 平台管理员、租户 Owner 和高风险操作建议强制 MFA。
 
-### 5.7 `sessions`：登录会话
+### 5.7 `user_sessions`：登录会话
 
 第一方 Web/Admin 的主要认证模型。
 
@@ -312,7 +312,7 @@ UNIQUE(provider_id, provider_subject)
 | `name` | varchar | 租户名称 |
 | `status` | enum | `pending/active/suspended/readonly/deleted` |
 | `authz_version` | bigint | 租户权限全局版本 |
-| `created_by_user_id` | UUID FK | 创建人 |
+| `created_by` | UUID FK | 创建人 |
 | `activated_at` | timestamptz | 激活时间 |
 | `suspended_at` | timestamptz | 暂停时间 |
 | `created_at` | timestamptz | 创建时间 |
@@ -357,7 +357,7 @@ UNIQUE(tenant_id, id)
 
 不在本表保存 `role_id`，因为一个成员可以拥有多个角色，且角色可能只在某个工作区生效。
 
-### 5.10 `member_invitations`：成员邀请
+### 5.10 `tenant_member_invitations`：成员邀请
 
 邀请和正式成员分开，避免创建大量没有用户账号的成员记录。
 
@@ -368,10 +368,10 @@ UNIQUE(tenant_id, id)
 | `identifier_type` | enum | `email/phone` |
 | `identifier_value` | varchar | 被邀请邮箱或手机号 |
 | `token_hash` | bytea UNIQUE | 一次性令牌哈希 |
-| `invited_by_member_id` | UUID FK | 邀请人 |
+| `invited_by` | UUID FK | 邀请人 |
 | `status` | enum | `pending/accepted/expired/revoked` |
 | `expires_at` | timestamptz | 过期时间 |
-| `accepted_by_user_id` | UUID nullable | 接受邀请的用户 |
+| `accepted_by` | UUID nullable | 接受邀请的用户 |
 | `accepted_at` | timestamptz | 接受时间 |
 | `created_at` | timestamptz | 创建时间 |
 
@@ -384,7 +384,7 @@ UNIQUE(tenant_id, id)
 5. 将邀请标记为 `accepted`。
 6. 写审计日志与 Outbox。
 
-### 5.11 `workspaces`：工作区
+### 5.11 `tenant_workspaces`：工作区
 
 工作区是业务协作范围，不是组织部门，也不是租户隔离边界。
 
@@ -405,7 +405,7 @@ UNIQUE(tenant_id, code)
 UNIQUE(tenant_id, id)
 ```
 
-### 5.12 `workspace_memberships`：成员工作区关系
+### 5.12 `tenant_workspace_memberships`：成员工作区关系
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
@@ -421,7 +421,7 @@ UNIQUE(tenant_id, id)
 PRIMARY KEY(workspace_id, member_id)
 
 FOREIGN KEY(tenant_id, workspace_id)
-    REFERENCES workspaces(tenant_id, id)
+    REFERENCES tenant_workspaces(tenant_id, id)
 
 FOREIGN KEY(tenant_id, member_id)
     REFERENCES tenant_members(tenant_id, id)
@@ -429,7 +429,7 @@ FOREIGN KEY(tenant_id, member_id)
 
 复合外键可以从数据库层阻止跨租户关联。
 
-### 5.13 `org_units`：组织单元
+### 5.13 `tenant_org_units`：组织单元
 
 用统一树模型表达公司、事业部、部门、团队，不分别维护多套树。
 
@@ -454,7 +454,7 @@ UNIQUE(tenant_id, id)
 
 `parent_id` 必须通过复合外键保证属于相同租户。
 
-### 5.14 `org_unit_closure`：组织树闭包表
+### 5.14 `tenant_org_unit_closures`：组织树闭包表
 
 用于高效查询“本部门及所有子部门”。
 
@@ -474,7 +474,7 @@ CHECK(depth >= 0)
 
 创建组织单元时，应插入自身 `depth=0`，并复制父节点的全部祖先关系。
 
-### 5.15 `member_org_units`：成员组织归属
+### 5.15 `tenant_member_org_units`：成员组织归属
 
 支持一个成员属于多个组织单元，同时保留一个主部门。
 
@@ -497,7 +497,7 @@ PRIMARY KEY(member_id, org_unit_id)
 
 ```sql
 CREATE UNIQUE INDEX uq_member_primary_org_unit
-ON member_org_units(member_id)
+ON tenant_member_org_units(member_id)
 WHERE is_primary = true;
 ```
 
@@ -571,7 +571,7 @@ workflow.instance.approve
 - 平台权限使用 `platform.*` 命名空间。
 - 租户角色不能引用 `platform` realm 权限。
 
-### 6.2 `role_templates`：平台角色模板
+### 6.2 `tenant_role_templates`：平台角色模板
 
 用于新租户初始化。
 
@@ -599,7 +599,7 @@ auditor
 
 创建租户时将模板复制为租户角色，避免租户后续自定义直接影响全局模板。
 
-### 6.3 `role_template_permissions`
+### 6.3 `tenant_role_template_permissions`
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
@@ -613,7 +613,7 @@ auditor
 PRIMARY KEY(role_template_id, permission_code)
 ```
 
-### 6.4 `roles`：租户角色
+### 6.4 `tenant_roles`：租户角色
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
@@ -626,7 +626,7 @@ PRIMARY KEY(role_template_id, permission_code)
 | `role_type` | enum | `system/custom` |
 | `status` | enum | `active/disabled` |
 | `version` | bigint | 乐观锁版本 |
-| `created_by_member_id` | UUID FK | 创建人 |
+| `created_by` | UUID FK | 创建人 |
 | `created_at` | timestamptz | 创建时间 |
 | `updated_at` | timestamptz | 更新时间 |
 
@@ -639,7 +639,7 @@ UNIQUE(tenant_id, id)
 
 系统 Owner 角色可以禁止删除，但其权限仍以显式记录存在，不在业务代码中使用 `role == owner` 绕过检查。
 
-### 6.5 `role_permissions`：角色权限授权
+### 6.5 `tenant_role_permissions`：角色权限授权
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
@@ -647,7 +647,7 @@ UNIQUE(tenant_id, id)
 | `tenant_id` | UUID | 租户 |
 | `role_id` | UUID FK | 角色 |
 | `permission_code` | varchar FK | 原子权限 |
-| `created_by_member_id` | UUID FK | 授权人 |
+| `created_by` | UUID FK | 授权人 |
 | `created_at` | timestamptz | 授权时间 |
 
 约束：
@@ -656,9 +656,9 @@ UNIQUE(tenant_id, id)
 UNIQUE(role_id, permission_code)
 ```
 
-RBAC 层只保存允许授权，不在这里加入 deny。显式拒绝统一由 `policy_rules` 处理。
+RBAC 层只保存允许授权，不在这里加入 deny。显式拒绝统一由 `tenant_policy_rules` 处理。
 
-### 6.6 `permission_scopes`：权限的数据范围
+### 6.6 `tenant_permission_scopes`：权限的数据范围
 
 数据范围与具体角色权限绑定，而不是简单绑定角色。
 
@@ -699,9 +699,9 @@ CUSTOM
 
 同一个角色权限可以配置多个 Scope，多个 Scope 按并集处理。
 
-### 6.7 `permission_scope_targets`：自定义范围目标
+### 6.7 `tenant_permission_scope_targets`：自定义范围目标
 
-主要用于 `CUSTOM`，避免把目标 ID 全部放入 JSON。
+主要用于 `custom`，避免把目标 ID 全部放入 JSON。
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
@@ -715,7 +715,7 @@ CUSTOM
 
 使用 CHECK 约束保证恰好一个目标字段不为空，并与 `target_type` 匹配。
 
-### 6.8 `member_role_bindings`：成员角色绑定
+### 6.8 `tenant_member_role_bindings`：成员角色绑定
 
 这是“某成员在什么范围内拥有什么角色”的核心模型。
 
@@ -730,7 +730,7 @@ CUSTOM
 | `org_unit_id` | UUID nullable | 组织范围 |
 | `valid_from` | timestamptz | 生效时间 |
 | `valid_until` | timestamptz nullable | 失效时间 |
-| `granted_by_member_id` | UUID FK | 授权人 |
+| `granted_by` | UUID FK | 授权人 |
 | `created_at` | timestamptz | 创建时间 |
 
 语义：
@@ -754,7 +754,7 @@ org_unit  -> 只有 org_unit_id 非空
 - 在工作区 B 只有 `viewer`。
 - 同时属于多个角色。
 
-### 6.9 `policy_rules`：受控 ABAC 策略
+### 6.9 `tenant_policy_rules`：受控 ABAC 策略
 
 ABAC 不绕过 RBAC 创建新的权限，只负责：
 
@@ -843,7 +843,7 @@ platform_security_auditor
 platform_billing_operator
 ```
 
-字段与 `roles` 类似，但不包含 `tenant_id`。
+字段与 `tenant_roles` 类似，但不包含 `tenant_id`。
 
 ### 7.2 `platform_role_permissions`
 
@@ -872,12 +872,12 @@ platform.support.access
 | `platform_role_id` | UUID FK | 平台角色 |
 | `valid_from` | timestamptz | 生效时间 |
 | `valid_until` | timestamptz nullable | 临时授权截止 |
-| `granted_by_user_id` | UUID FK | 授权人 |
+| `granted_by` | UUID FK | 授权人 |
 | `created_at` | timestamptz | 创建时间 |
 
 平台角色不能直接成为 `tenant_members` 的角色。
 
-### 7.4 `support_access_sessions`：租户代操作
+### 7.4 `platform_support_access_sessions`：租户代操作
 
 平台客服进入租户排查问题时必须创建代操作会话。
 
@@ -890,7 +890,7 @@ platform.support.access
 | `ticket_no` | varchar | 工单号 |
 | `access_mode` | enum | `readonly/limited` |
 | `allowed_permissions` | jsonb | 临时权限上限 |
-| `approved_by_user_id` | UUID nullable | 审批人 |
+| `approved_by` | UUID nullable | 审批人 |
 | `started_at` | timestamptz | 开始时间 |
 | `expires_at` | timestamptz | 过期时间 |
 | `revoked_at` | timestamptz | 撤销时间 |
@@ -923,7 +923,7 @@ erDiagram
     API_KEYS ||--o{ AUDIT_EVENTS : traces
 ```
 
-### 8.1 `service_accounts`：服务账号
+### 8.1 `tenant_service_accounts`：服务账号
 
 代表集成、自动化任务或外部系统，不伪装成普通用户。
 
@@ -935,17 +935,17 @@ erDiagram
 | `description` | text | 用途 |
 | `status` | enum | `active/disabled` |
 | `authz_version` | bigint | 权限版本 |
-| `created_by_member_id` | UUID FK | 创建人 |
+| `created_by` | UUID FK | 创建人 |
 | `last_used_at` | timestamptz | 最近使用时间 |
 | `created_at` | timestamptz | 创建时间 |
 
-### 8.2 `service_account_role_bindings`
+### 8.2 `tenant_service_account_role_bindings`
 
-结构与 `member_role_bindings` 相同，但主体是 `service_account_id`。
+结构与 `tenant_member_role_bindings` 相同，但主体是 `service_account_id`。
 
 使用分表而非 `subject_type + subject_id`，便于建立真实外键，避免把不存在的主体 ID 写入绑定记录。
 
-### 8.3 `api_keys`
+### 8.3 `service_account_api_keys`
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
@@ -1176,8 +1176,8 @@ WHERE status IN ('trialing', 'active', 'past_due', 'suspended');
 | `effective_from` | timestamptz | 生效时间 |
 | `effective_until` | timestamptz nullable | 失效时间；为空表示长期生效 |
 | `status` | enum | `active/revoked/expired` |
-| `granted_by_user_id` | UUID FK | 授权平台用户 |
-| `revoked_by_user_id` | UUID nullable FK | 撤销平台用户 |
+| `granted_by` | UUID FK | 授权平台用户 |
+| `revoked_by` | UUID nullable FK | 撤销平台用户 |
 | `revoked_at` | timestamptz nullable | 撤销时间 |
 | `created_at` | timestamptz | 创建时间 |
 | `updated_at` | timestamptz | 更新时间 |
@@ -1337,7 +1337,7 @@ tenant_id
 workspace_id
 owner_member_id
 org_unit_id
-created_by_member_id
+created_by
 created_at
 updated_at
 ```
@@ -1352,7 +1352,7 @@ owner_member_id
 org_unit_id
 name
 status
-created_by_member_id
+created_by
 created_at
 updated_at
 ```
@@ -1361,12 +1361,12 @@ updated_at
 
 | Scope | SQL 语义 |
 | --- | --- |
-| `SELF` | `owner_member_id = current_member_id` |
-| `DEPARTMENT` | `org_unit_id IN current_member_org_units` |
-| `DEPARTMENT_AND_CHILDREN` | 通过 `org_unit_closure` 查询全部后代 |
-| `WORKSPACE` | `workspace_id IN permitted_workspace_ids` |
-| `TENANT` | 只保留 `tenant_id` 条件 |
-| `CUSTOM` | 根据 `permission_scope_targets` 组合 |
+| `self` | `owner_member_id = current_member_id` |
+| `department` | `org_unit_id IN current_member_org_units` |
+| `department_and_children` | 通过 `tenant_org_unit_closures` 查询全部后代 |
+| `workspace` | `workspace_id IN permitted_workspace_ids` |
+| `tenant` | 只保留 `tenant_id` 条件 |
+| `custom` | 根据 `tenant_permission_scope_targets` 组合 |
 
 任何详情查询必须同时带范围条件：
 
@@ -1463,7 +1463,7 @@ crm.customer.read -> SELF
 crm.customer.export -> DEPARTMENT
 ```
 
-成员读取客户时只能得到 `SELF`，不能因为角色 B 拥有部门导出范围而扩大读取权限。
+成员读取客户时只能得到 `self`，不能因为角色 B 拥有部门导出范围而扩大读取权限。
 
 如果两个角色都授予 `crm.customer.read`：
 
@@ -1478,7 +1478,7 @@ crm.customer.export -> DEPARTMENT
 SELF ∪ DEPARTMENT
 ```
 
-`TENANT` 是最大范围，但显式 ABAC deny 仍然可以继续缩小结果。
+`tenant` 是最大范围，但显式 ABAC deny 仍然可以继续缩小结果。
 
 ---
 
@@ -1495,7 +1495,7 @@ UNIQUE(tenant_id, id)
 
 ```sql
 FOREIGN KEY (tenant_id, role_id)
-REFERENCES roles(tenant_id, id);
+REFERENCES tenant_roles(tenant_id, id);
 ```
 
 这样即使应用代码传错 ID，也无法把租户 A 的成员绑定到租户 B 的角色。
@@ -1680,21 +1680,21 @@ authz:{tenantID}:{memberID}:{tenantAuthzVersion}:{memberAuthzVersion}
 1. `users`
 2. `user_identifiers`
 3. `user_credentials`
-4. `sessions`
+4. `user_sessions`
 5. `tenants`
 6. `tenant_members`
-7. `member_invitations`
-8. `workspaces`
-9. `workspace_memberships`
-10. `org_units`
-11. `org_unit_closure`
-12. `member_org_units`
+7. `tenant_member_invitations`
+8. `tenant_workspaces`
+9. `tenant_workspace_memberships`
+10. `tenant_org_units`
+11. `tenant_org_unit_closures`
+12. `tenant_member_org_units`
 13. `permission_definitions`
-14. `role_templates`
-15. `roles`
-16. `role_permissions`
-17. `permission_scopes`
-18. `member_role_bindings`
+14. `tenant_role_templates`
+15. `tenant_roles`
+16. `tenant_role_permissions`
+17. `tenant_permission_scopes`
+18. `tenant_member_role_bindings`
 19. `audit_events`
 20. `outbox_events`
 

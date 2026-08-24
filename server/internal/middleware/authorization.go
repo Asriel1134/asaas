@@ -2,7 +2,6 @@ package middleware
 
 import (
 	"errors"
-	"fmt"
 	"net/http"
 	"slices"
 
@@ -12,7 +11,6 @@ import (
 	"asriel.cn/asaas/server/internal/platform/i18n"
 	"asriel.cn/asaas/server/internal/platform/response"
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 )
 
 var whitelist = []string{
@@ -43,8 +41,11 @@ func Authorization() gin.HandlerFunc {
 		}
 
 		acc := access.Context{
-			UserID:    session.UserID,
-			SessionID: session.ID,
+			UserID:               session.UserID,
+			SessionID:            session.ID,
+			CatalogAuthzVersion:  session.PermissionCatalogVersion,
+			TenantAuthzVersion:   session.TenantAuthzVersion,
+			PlatformAuthzVersion: session.PlatformGlobalAuthzVersion,
 		}
 
 		switch session.ContextType {
@@ -60,13 +61,14 @@ func Authorization() gin.HandlerFunc {
 		case sqlc.SessionContextTypeTenant:
 			if !session.ContextTenantID.Valid ||
 				!session.MemberStatus.Valid || session.MemberStatus.TenantMemberStatus != sqlc.TenantMemberStatusActive ||
-				!session.TenantStatus.Valid || (session.TenantStatus.TenantsStatus != sqlc.TenantsStatusActive && session.TenantStatus.TenantsStatus != sqlc.TenantsStatusReadonly) {
+				!session.TenantStatus.Valid || (session.TenantStatus.TenantStatus != sqlc.TenantStatusActive && session.TenantStatus.TenantStatus != sqlc.TenantStatusReadonly) {
 				response.Result(c, http.StatusForbidden, response.AuthenticationErrorCode,
 					i18n.T(lang, "authorization.member_inactive"), nil)
 				c.Abort()
 				return
 			}
 			acc.Realm = access.RealmTenant
+			acc.SubjectAuthzVersion = session.MemberAuthzVersion
 			acc.TenantID = session.ContextTenantID.Bytes
 			if session.DefaultWorkspaceID.Valid {
 				acc.WorkspaceID = session.DefaultWorkspaceID.Bytes
@@ -79,14 +81,14 @@ func Authorization() gin.HandlerFunc {
 				c.Abort()
 				return
 			}
-			isPlatformUser, platformErr := (&service.PermissionService{}).IsPlatformUser(c.Request.Context(), session.UserID)
-			if platformErr != nil || !isPlatformUser {
+			if !session.IsPlatformUser {
 				response.Result(c, http.StatusForbidden, response.AuthenticationErrorCode,
 					i18n.T(lang, "authorization.platform_access_denied"), nil)
 				c.Abort()
 				return
 			}
 			acc.Realm = access.RealmPlatform
+			acc.SubjectAuthzVersion = session.PlatformUserAuthzVersion
 
 		default:
 			response.Result(c, http.StatusUnauthorized, response.AuthenticationErrorCode,
@@ -112,8 +114,4 @@ func RequireRealm(realm access.Realm) gin.HandlerFunc {
 		}
 		c.Next()
 	}
-}
-
-func PermissionCacheKey(tenantID, userID uuid.UUID, tenantVer, memberVer int64) string {
-	return fmt.Sprintf("authz:%s:%s:%d:%d", tenantID, userID, tenantVer, memberVer)
 }

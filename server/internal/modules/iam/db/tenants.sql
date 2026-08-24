@@ -4,15 +4,13 @@ INSERT INTO tenants (
     slug,
     name,
     status,
-    authz_version,
-    create_by_user_id,
+    created_by,
     created_at
 ) VALUES (
     $1,
     $2,
     $3,
     'active',
-    1,
     $4,
     $5
 );
@@ -21,27 +19,23 @@ INSERT INTO tenants (
 INSERT INTO tenant_members (
     tenant_id,
     user_id,
-    status,
-    authz_version,
     joined_at,
     created_at
 ) VALUES (
     $1,
     $2,
-    'active',
-    1,
     $3,
     $4
 );
 
 -- name: DisableMember :exec
 UPDATE tenant_members
-SET status = 'disabled', disabled_at = $3
+SET status = 'disabled', disabled_at = $3, authz_version = authz_version + 1
 WHERE tenant_id = $1 AND user_id = $2 AND status = 'active';
 
 -- name: RemoveMember :exec
 UPDATE tenant_members
-SET status = 'removed', removed_at = $3
+SET status = 'removed', removed_at = $3, authz_version = authz_version + 1
 WHERE tenant_id = $1 AND user_id = $2 AND status IN ('active', 'disabled');
 
 -- name: GetUserTenants :many

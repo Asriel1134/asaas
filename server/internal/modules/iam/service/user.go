@@ -179,11 +179,8 @@ func ValidatePasswordFormat(password string) bool {
 func (*UserService) RecordFailedAttempt(ctx context.Context, userID uuid.UUID) error {
 	_, err := database.Tx[any](ctx, func(tx pgx.Tx) (any, error) {
 		_, err := sqlc.New(tx).IncrementFailedAttempts(ctx, sqlc.IncrementFailedAttemptsParams{
-			UserID: userID,
-			Threshold: pgtype.Int4{
-				Int32: maxFailedAttempts,
-				Valid: true,
-			},
+			UserID:    userID,
+			Threshold: maxFailedAttempts,
 			LockUntil: pgtype.Timestamptz{Time: time.Now().Add(lockDuration), Valid: true},
 			UpdatedAt: time.Now(),
 		})

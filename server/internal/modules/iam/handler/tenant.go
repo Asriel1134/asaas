@@ -5,6 +5,7 @@ import (
 
 	"asriel.cn/asaas/server/internal/middleware"
 	"asriel.cn/asaas/server/internal/modules/iam/service"
+	"asriel.cn/asaas/server/internal/pkg/access"
 	"asriel.cn/asaas/server/internal/platform/i18n"
 	"asriel.cn/asaas/server/internal/platform/response"
 	"github.com/gin-gonic/gin"
@@ -18,9 +19,9 @@ type TenantHandler struct {
 func (handler *TenantHandler) Register(g *gin.RouterGroup) {
 	group := g.Group("/tenant", middleware.Module("TENANT"))
 	group.POST("create", middleware.Action("CREATE"), handler.create)
-	group.POST("invite", middleware.Action("INVITE"), handler.invite)
-	group.POST("member/disable", middleware.Action("DISABLE_MEMBER"), handler.disableMember)
-	group.POST("member/remove", middleware.Action("REMOVE_MEMBER"), handler.removeMember)
+	group.POST("invite", middleware.Action("INVITE"), middleware.RequireRealm(access.RealmTenant), middleware.RequirePermission("iam.member.invite"), handler.invite)
+	group.POST("member/disable", middleware.Action("DISABLE_MEMBER"), middleware.RequireRealm(access.RealmTenant), middleware.RequirePermission("iam.member.disable"), handler.disableMember)
+	group.POST("member/remove", middleware.Action("REMOVE_MEMBER"), middleware.RequireRealm(access.RealmTenant), middleware.RequirePermission("iam.member.remove"), handler.removeMember)
 }
 
 func (handler *TenantHandler) create(c *gin.Context) {
@@ -45,19 +46,14 @@ func (handler *TenantHandler) create(c *gin.Context) {
 func (handler *TenantHandler) invite(c *gin.Context) {
 	lang := i18n.GetLanguage(c.Request.Context())
 
-	tenantID, err := uuid.Parse(c.PostForm("tenant_id"))
-	if err != nil {
-		response.Error(c, response.ParamErrorCode, i18n.T(lang, "iam.tenant.invalid_param"))
-		return
-	}
-
+	acc, _ := access.Get(c.Request.Context())
 	userID, err := uuid.Parse(c.PostForm("user_id"))
 	if err != nil {
 		response.Error(c, response.ParamErrorCode, i18n.T(lang, "iam.tenant.invalid_param"))
 		return
 	}
 
-	if err := handler.tenantService.InviteMember(c.Request.Context(), tenantID, userID); err != nil {
+	if err := handler.tenantService.InviteMember(c.Request.Context(), acc.TenantID, userID); err != nil {
 		if errors.Is(err, service.ErrAlreadyMember) {
 			response.Error(c, response.BusinessErrorCode, i18n.T(lang, "iam.tenant.already_member"))
 			return
@@ -72,19 +68,14 @@ func (handler *TenantHandler) invite(c *gin.Context) {
 func (handler *TenantHandler) disableMember(c *gin.Context) {
 	lang := i18n.GetLanguage(c.Request.Context())
 
-	tenantID, err := uuid.Parse(c.PostForm("tenant_id"))
-	if err != nil {
-		response.Error(c, response.ParamErrorCode, i18n.T(lang, "iam.tenant.invalid_param"))
-		return
-	}
-
+	acc, _ := access.Get(c.Request.Context())
 	userID, err := uuid.Parse(c.PostForm("user_id"))
 	if err != nil {
 		response.Error(c, response.ParamErrorCode, i18n.T(lang, "iam.tenant.invalid_param"))
 		return
 	}
 
-	if err := handler.tenantService.DisableMember(c.Request.Context(), tenantID, userID); err != nil {
+	if err := handler.tenantService.DisableMember(c.Request.Context(), acc.TenantID, userID); err != nil {
 		response.Error(c, response.BusinessErrorCode, i18n.T(lang, "iam.tenant.disable_member_failed"))
 		return
 	}
@@ -95,19 +86,14 @@ func (handler *TenantHandler) disableMember(c *gin.Context) {
 func (handler *TenantHandler) removeMember(c *gin.Context) {
 	lang := i18n.GetLanguage(c.Request.Context())
 
-	tenantID, err := uuid.Parse(c.PostForm("tenant_id"))
-	if err != nil {
-		response.Error(c, response.ParamErrorCode, i18n.T(lang, "iam.tenant.invalid_param"))
-		return
-	}
-
+	acc, _ := access.Get(c.Request.Context())
 	userID, err := uuid.Parse(c.PostForm("user_id"))
 	if err != nil {
 		response.Error(c, response.ParamErrorCode, i18n.T(lang, "iam.tenant.invalid_param"))
 		return
 	}
 
-	if err := handler.tenantService.RemoveMember(c.Request.Context(), tenantID, userID); err != nil {
+	if err := handler.tenantService.RemoveMember(c.Request.Context(), acc.TenantID, userID); err != nil {
 		response.Error(c, response.BusinessErrorCode, i18n.T(lang, "iam.tenant.remove_member_failed"))
 		return
 	}

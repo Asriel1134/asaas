@@ -39,8 +39,8 @@ type SelectedContext struct {
 }
 
 type SelectContextResponse struct {
-	Context     SelectedContext `json:"context"`
-	Permissions any             `json:"permissions"`
+	Context     SelectedContext           `json:"context"`
+	Permissions []service.PermissionGrant `json:"permissions"`
 }
 
 type AuthHandler struct {
@@ -96,7 +96,7 @@ func (handler *AuthHandler) loginByPassword(c *gin.Context) {
 		return
 	}
 
-	switch i.Status.UserStatus {
+	switch i.Status {
 	case sqlc.UserStatusLocked:
 		response.Error(c, response.AuthenticationErrorCode, i18n.T(lang, "iam.login.account_locked"))
 		return
@@ -150,7 +150,7 @@ func (handler *AuthHandler) loginByPassword(c *gin.Context) {
 			e.TenantID = &id
 		}
 		if r.TenantStatus.Valid {
-			e.TenantStatus = string(r.TenantStatus.TenantsStatus)
+			e.TenantStatus = string(r.TenantStatus.TenantStatus)
 		}
 		if r.JobTitle.Valid {
 			e.JobTitle = &r.JobTitle.String
@@ -202,12 +202,6 @@ func (handler *AuthHandler) selectContext(c *gin.Context) {
 			return
 		}
 
-		permissions, err := handler.permissionService.GetTenantPermissions(c.Request.Context(), acc.UserID, tenantID, acc.WorkspaceID)
-		if err != nil {
-			response.Error(c, response.AuthenticationErrorCode, i18n.T(lang, "iam.login.login_failed"))
-			return
-		}
-
 		if err := handler.sessionService.SelectTenantContext(c.Request.Context(), acc.SessionID, tenantID); err != nil {
 			if errors.Is(err, service.ErrContextSelectionDenied) {
 				response.Error(c, response.AuthenticationErrorCode, i18n.T(lang, "iam.login.tenant_access_denied"))
@@ -216,21 +210,25 @@ func (handler *AuthHandler) selectContext(c *gin.Context) {
 			response.Error(c, response.AuthenticationErrorCode, i18n.T(lang, "iam.login.login_failed"))
 			return
 		}
+		selectedAcc, err := handler.sessionService.GetAuthorizationContext(c.Request.Context(), acc.SessionID)
+		if err != nil {
+			response.Error(c, response.AuthenticationErrorCode, i18n.T(lang, "iam.login.login_failed"))
+			return
+		}
+		snapshot, err := handler.permissionService.GetSnapshot(c.Request.Context(), selectedAcc)
+		if err != nil {
+			response.Error(c, response.AuthenticationErrorCode, i18n.T(lang, "iam.login.login_failed"))
+			return
+		}
 
 		response.Success(c, SelectContextResponse{
 			Context:     SelectedContext{Type: access.RealmTenant, TenantID: &tenantID},
-			Permissions: permissions,
+			Permissions: snapshot.List(),
 		})
 
 	case access.RealmPlatform:
 		if req.TenantID != "" {
 			response.Error(c, response.ParamErrorCode, i18n.T(lang, "iam.login.invalid_context"))
-			return
-		}
-
-		permissions, err := handler.permissionService.GetPlatformPermissions(c.Request.Context(), acc.UserID)
-		if err != nil {
-			response.Error(c, response.AuthenticationErrorCode, i18n.T(lang, "iam.login.login_failed"))
 			return
 		}
 
@@ -242,10 +240,20 @@ func (handler *AuthHandler) selectContext(c *gin.Context) {
 			response.Error(c, response.AuthenticationErrorCode, i18n.T(lang, "iam.login.login_failed"))
 			return
 		}
+		selectedAcc, err := handler.sessionService.GetAuthorizationContext(c.Request.Context(), acc.SessionID)
+		if err != nil {
+			response.Error(c, response.AuthenticationErrorCode, i18n.T(lang, "iam.login.login_failed"))
+			return
+		}
+		snapshot, err := handler.permissionService.GetSnapshot(c.Request.Context(), selectedAcc)
+		if err != nil {
+			response.Error(c, response.AuthenticationErrorCode, i18n.T(lang, "iam.login.login_failed"))
+			return
+		}
 
 		response.Success(c, SelectContextResponse{
 			Context:     SelectedContext{Type: access.RealmPlatform},
-			Permissions: permissions,
+			Permissions: snapshot.List(),
 		})
 
 	default:

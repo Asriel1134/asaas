@@ -56,7 +56,7 @@ func (*SessionService) CreateSession(c *gin.Context, identifier sqlc.GetLoginIde
 					ID:                id.UUID(),
 					UserID:            identifier.UserID,
 					TokenHash:         hash,
-					SecurityVersion:   identifier.SecurityVersion.Int64,
+					SecurityVersion:   identifier.SecurityVersion,
 					AuthnLevel:        sqlc.AuthnLevelPassword,
 					DeviceID:          pgtype.Text{},
 					DeviceName:        pgtype.Text{},
@@ -112,7 +112,7 @@ func (*SessionService) GetSession(c *gin.Context) (sqlc.GetSessionByTokenHashRow
 	if session.Status != sqlc.SessionStatusActive {
 		return sqlc.GetSessionByTokenHashRow{}, ErrSessionRevoked
 	}
-	if session.CurrentSecurityVersion.Valid && session.SecurityVersion < session.CurrentSecurityVersion.Int64 {
+	if session.SecurityVersion < session.CurrentSecurityVersion {
 		return sqlc.GetSessionByTokenHashRow{}, ErrSessionSecurityChange
 	}
 
@@ -171,6 +171,40 @@ func (*SessionService) SelectPlatformContext(ctx context.Context, sessionID uuid
 		return ErrContextSelectionDenied
 	}
 	return nil
+}
+
+func (*SessionService) GetAuthorizationContext(ctx context.Context, sessionID uuid.UUID) (access.Context, error) {
+	state, err := sqlc.New(database.DB).GetSessionAuthorizationState(ctx, sessionID)
+	if err != nil {
+		return access.Context{}, err
+	}
+
+	acc := access.Context{
+		UserID:               state.UserID,
+		SessionID:            sessionID,
+		CatalogAuthzVersion:  state.PermissionCatalogVersion,
+		TenantAuthzVersion:   state.TenantAuthzVersion,
+		PlatformAuthzVersion: state.PlatformGlobalAuthzVersion,
+	}
+
+	switch state.ContextType {
+	case sqlc.SessionContextTypeTenant:
+		acc.Realm = access.RealmTenant
+		acc.SubjectAuthzVersion = state.MemberAuthzVersion
+		if state.ContextTenantID.Valid {
+			acc.TenantID = state.ContextTenantID.Bytes
+		}
+		if state.DefaultWorkspaceID.Valid {
+			acc.WorkspaceID = state.DefaultWorkspaceID.Bytes
+		}
+	case sqlc.SessionContextTypePlatform:
+		acc.Realm = access.RealmPlatform
+		acc.SubjectAuthzVersion = state.PlatformUserAuthzVersion
+	default:
+		acc.Realm = access.RealmPending
+	}
+
+	return acc, nil
 }
 
 func parseClientIP(ip string) *netip.Addr {

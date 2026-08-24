@@ -19,11 +19,15 @@ const (
 )
 
 type Context struct {
-	UserID      uuid.UUID
-	TenantID    uuid.UUID
-	WorkspaceID uuid.UUID
-	SessionID   uuid.UUID
-	Realm       Realm
+	UserID               uuid.UUID
+	TenantID             uuid.UUID
+	WorkspaceID          uuid.UUID
+	SessionID            uuid.UUID
+	Realm                Realm
+	CatalogAuthzVersion  int64
+	TenantAuthzVersion   int64
+	SubjectAuthzVersion  int64
+	PlatformAuthzVersion int64
 }
 
 // Set stores access info into the context.
