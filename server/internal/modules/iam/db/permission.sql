@@ -60,6 +60,6 @@ WHERE mrb.user_id = sqlc.arg(userID)
   AND pd.status = 'active'
   AND (
       mrb.binding_scope = 'tenant'
-      OR (mrb.binding_scope = 'workspace' AND mrb.workspace_id = sqlc.narg(workspaceID))
+      OR (mrb.binding_scope = 'workspace' AND mrb.workspace_id = COALESCE(sqlc.narg(workspaceID), tm.default_workspace_id))
       OR (mrb.binding_scope = 'org_unit'  AND mou.org_unit_id IS NOT NULL)
   );

@@ -25,10 +25,10 @@ const (
 )
 
 var (
-	ErrSessionExpired        = errors.New("session expired")
-	ErrSessionRevoked        = errors.New("session revoked")
-	ErrSessionSecurityChange = errors.New("session invalidated by security change")
-	ErrTenantAlreadySet      = errors.New("session tenant already set")
+	ErrSessionExpired         = errors.New("session expired")
+	ErrSessionRevoked         = errors.New("session revoked")
+	ErrSessionSecurityChange  = errors.New("session invalidated by security change")
+	ErrContextSelectionDenied = errors.New("session context selection denied")
 )
 
 type SessionService struct {
@@ -63,7 +63,7 @@ func (*SessionService) CreateSession(c *gin.Context, identifier sqlc.GetLoginIde
 					IpCreated:         clientIP,
 					IpLast:            clientIP,
 					UserAgentHash:     uaHash,
-					TenantHint:        pgtype.UUID{},
+					ContextTenantID:   pgtype.UUID{},
 					Status:            sqlc.SessionStatusActive,
 					IssuedAt:          now,
 					LastSeenAt:        now,
@@ -148,16 +148,27 @@ func (*SessionService) RevokeSession(c *gin.Context) error {
 	return nil
 }
 
-func (*SessionService) SetSessionTenant(ctx context.Context, sessionID, tenantID uuid.UUID) error {
-	rows, err := sqlc.New(database.DB).SetSessionTenantHint(ctx, sqlc.SetSessionTenantHintParams{
-		ID:         sessionID,
-		TenantHint: pgtype.UUID{Bytes: tenantID, Valid: true},
+func (*SessionService) SelectTenantContext(ctx context.Context, sessionID, tenantID uuid.UUID) error {
+	rows, err := sqlc.New(database.DB).SelectTenantContext(ctx, sqlc.SelectTenantContextParams{
+		Sessionid: sessionID,
+		Tenantid:  pgtype.UUID{Bytes: tenantID, Valid: true},
 	})
 	if err != nil {
 		return err
 	}
 	if rows == 0 {
-		return ErrTenantAlreadySet
+		return ErrContextSelectionDenied
+	}
+	return nil
+}
+
+func (*SessionService) SelectPlatformContext(ctx context.Context, sessionID uuid.UUID) error {
+	rows, err := sqlc.New(database.DB).SelectPlatformContext(ctx, sessionID)
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return ErrContextSelectionDenied
 	}
 	return nil
 }

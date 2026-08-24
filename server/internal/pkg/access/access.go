@@ -10,11 +10,20 @@ type ctxKey string
 
 const accessCtxKey ctxKey = "access"
 
+type Realm string
+
+const (
+	RealmPending  Realm = "pending"
+	RealmTenant   Realm = "tenant"
+	RealmPlatform Realm = "platform"
+)
+
 type Context struct {
 	UserID      uuid.UUID
 	TenantID    uuid.UUID
 	WorkspaceID uuid.UUID
 	SessionID   uuid.UUID
+	Realm       Realm
 }
 
 // Set stores access info into the context.

@@ -28,6 +28,21 @@ type NavigationEntry struct {
 	EmployeeNo   *string    `json:"employee_no,omitempty"`
 }
 
+type SelectContextRequest struct {
+	Type     access.Realm `form:"type" json:"type" binding:"required,oneof=tenant platform"`
+	TenantID string       `form:"tenant_id" json:"tenant_id"`
+}
+
+type SelectedContext struct {
+	Type     access.Realm `json:"type"`
+	TenantID *uuid.UUID   `json:"tenant_id"`
+}
+
+type SelectContextResponse struct {
+	Context     SelectedContext `json:"context"`
+	Permissions any             `json:"permissions"`
+}
+
 type AuthHandler struct {
 	sessionService    *service.SessionService
 	userService       *service.UserService
@@ -38,7 +53,7 @@ func (handler *AuthHandler) Register(g *gin.RouterGroup) {
 	group := g.Group("/auth", middleware.Module("AUTH"))
 	group.POST("login/password", middleware.Action("LOGIN_BY_PASSWORD"), handler.loginByPassword)
 	group.POST("logout", middleware.Action("LOGOUT"), handler.logout)
-	group.POST("tenant", middleware.Action("SELECT_TENANT"), handler.selectTenant)
+	group.POST("context", middleware.Action("SELECT_CONTEXT"), handler.selectContext)
 }
 
 func (handler *AuthHandler) loginByPassword(c *gin.Context) {
@@ -159,7 +174,7 @@ func (handler *AuthHandler) loginByPassword(c *gin.Context) {
 	response.Success(c, entries)
 }
 
-func (handler *AuthHandler) selectTenant(c *gin.Context) {
+func (handler *AuthHandler) selectContext(c *gin.Context) {
 	lang := i18n.GetLanguage(c.Request.Context())
 
 	acc, ok := access.Get(c.Request.Context())
@@ -168,22 +183,74 @@ func (handler *AuthHandler) selectTenant(c *gin.Context) {
 		return
 	}
 
-	tenantID, err := uuid.Parse(c.PostForm("tenant_id"))
-	if err != nil {
-		response.Error(c, response.ParamErrorCode, i18n.T(lang, "iam.login.invalid_tenant"))
+	if acc.Realm != access.RealmPending {
+		response.Error(c, response.BusinessErrorCode, i18n.T(lang, "iam.login.context_already_selected"))
 		return
 	}
 
-	if err := handler.sessionService.SetSessionTenant(c.Request.Context(), acc.SessionID, tenantID); err != nil {
-		if errors.Is(err, service.ErrTenantAlreadySet) {
-			response.Error(c, response.BusinessErrorCode, i18n.T(lang, "iam.login.tenant_already_set"))
+	var req SelectContextRequest
+	if err := c.ShouldBind(&req); err != nil {
+		response.Error(c, response.ParamErrorCode, i18n.T(lang, "iam.login.invalid_context"))
+		return
+	}
+
+	switch req.Type {
+	case access.RealmTenant:
+		tenantID, err := uuid.Parse(req.TenantID)
+		if err != nil {
+			response.Error(c, response.ParamErrorCode, i18n.T(lang, "iam.login.invalid_tenant"))
 			return
 		}
-		response.Error(c, response.AuthenticationErrorCode, i18n.T(lang, "iam.login.login_failed"))
-		return
-	}
 
-	response.Success(c, nil)
+		permissions, err := handler.permissionService.GetTenantPermissions(c.Request.Context(), acc.UserID, tenantID, acc.WorkspaceID)
+		if err != nil {
+			response.Error(c, response.AuthenticationErrorCode, i18n.T(lang, "iam.login.login_failed"))
+			return
+		}
+
+		if err := handler.sessionService.SelectTenantContext(c.Request.Context(), acc.SessionID, tenantID); err != nil {
+			if errors.Is(err, service.ErrContextSelectionDenied) {
+				response.Error(c, response.AuthenticationErrorCode, i18n.T(lang, "iam.login.tenant_access_denied"))
+				return
+			}
+			response.Error(c, response.AuthenticationErrorCode, i18n.T(lang, "iam.login.login_failed"))
+			return
+		}
+
+		response.Success(c, SelectContextResponse{
+			Context:     SelectedContext{Type: access.RealmTenant, TenantID: &tenantID},
+			Permissions: permissions,
+		})
+
+	case access.RealmPlatform:
+		if req.TenantID != "" {
+			response.Error(c, response.ParamErrorCode, i18n.T(lang, "iam.login.invalid_context"))
+			return
+		}
+
+		permissions, err := handler.permissionService.GetPlatformPermissions(c.Request.Context(), acc.UserID)
+		if err != nil {
+			response.Error(c, response.AuthenticationErrorCode, i18n.T(lang, "iam.login.login_failed"))
+			return
+		}
+
+		if err := handler.sessionService.SelectPlatformContext(c.Request.Context(), acc.SessionID); err != nil {
+			if errors.Is(err, service.ErrContextSelectionDenied) {
+				response.Error(c, response.AuthenticationErrorCode, i18n.T(lang, "iam.login.platform_access_denied"))
+				return
+			}
+			response.Error(c, response.AuthenticationErrorCode, i18n.T(lang, "iam.login.login_failed"))
+			return
+		}
+
+		response.Success(c, SelectContextResponse{
+			Context:     SelectedContext{Type: access.RealmPlatform},
+			Permissions: permissions,
+		})
+
+	default:
+		response.Error(c, response.ParamErrorCode, i18n.T(lang, "iam.login.invalid_context"))
+	}
 }
 
 func (handler *AuthHandler) logout(c *gin.Context) {

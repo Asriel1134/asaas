@@ -164,6 +164,7 @@ CREATE INDEX idx_mfa_methods_user_id ON mfa_methods(user_id);
 
 CREATE TYPE authn_level AS ENUM ('password', 'mfa', 'sso');
 CREATE TYPE session_status AS ENUM ('active', 'revoked', 'expired');
+CREATE TYPE session_context_type AS ENUM ('pending', 'tenant', 'platform');
 CREATE TABLE IF NOT EXISTS sessions (
     id uuid NOT NULL PRIMARY KEY,
     user_id uuid NOT NULL,
@@ -175,7 +176,8 @@ CREATE TABLE IF NOT EXISTS sessions (
     ip_created inet,
     ip_last inet,
     user_agent_hash varchar,
-    tenant_hint uuid,
+    context_type session_context_type NOT NULL DEFAULT 'pending',
+    context_tenant_id uuid,
     status session_status NOT NULL DEFAULT 'active',
     issued_at timestamptz NOT NULL,
     last_seen_at timestamptz NOT NULL,
@@ -184,7 +186,11 @@ CREATE TABLE IF NOT EXISTS sessions (
     revoked_at timestamptz,
     revoke_reason varchar,
     CONSTRAINT uk_sessions_token_hash UNIQUE(token_hash),
-    CONSTRAINT fk_sessions_user_id FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE ON UPDATE CASCADE
+    CONSTRAINT fk_sessions_user_id FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT ck_sessions_context CHECK (
+        (context_type = 'tenant' AND context_tenant_id IS NOT NULL)
+        OR (context_type IN ('pending', 'platform') AND context_tenant_id IS NULL)
+    )
 );
 COMMENT ON TABLE sessions IS '登录会话';
 COMMENT ON COLUMN sessions.id IS '会话ID';
@@ -197,7 +203,8 @@ COMMENT ON COLUMN sessions.device_name IS '设备名称';
 COMMENT ON COLUMN sessions.ip_created IS '登录IP';
 COMMENT ON COLUMN sessions.ip_last IS '最近活动IP';
 COMMENT ON COLUMN sessions.user_agent_hash IS 'User-Agent摘要';
-COMMENT ON COLUMN sessions.tenant_hint IS '最近租户提示';
+COMMENT ON COLUMN sessions.context_type IS '会话当前上下文：待选择、租户或管理平台';
+COMMENT ON COLUMN sessions.context_tenant_id IS '租户上下文中的租户ID';
 COMMENT ON COLUMN sessions.status IS '会话状态';
 COMMENT ON COLUMN sessions.issued_at IS '签发时间';
 COMMENT ON COLUMN sessions.last_seen_at IS '最近使用时间';

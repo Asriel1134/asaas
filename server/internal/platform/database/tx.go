@@ -23,7 +23,7 @@ func Tx[T any](ctx context.Context, f func(tx pgx.Tx) (T, error)) (T, error) {
 	}()
 
 	acc, ok := access.Get(ctx)
-	if ok && acc.TenantID != uuid.Nil {
+	if ok && acc.Realm == access.RealmTenant && acc.TenantID != uuid.Nil {
 		_, err = tx.Exec(
 			ctx,
 			`SELECT set_config('app.tenant_id', $1, true)`,

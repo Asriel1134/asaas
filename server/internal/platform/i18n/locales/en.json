@@ -16,8 +16,11 @@
       "account_locked": "Account is locked, please contact support",
       "account_deleted": "Account has been deleted",
       "must_change_password": "Password change required, please update your password",
+      "invalid_context": "Invalid login context",
       "invalid_tenant": "Invalid tenant",
-      "tenant_already_set": "Tenant already selected",
+      "context_already_selected": "Login context has already been selected",
+      "tenant_access_denied": "Cannot enter this tenant",
+      "platform_access_denied": "Management platform access denied",
       "logout_failed": "Logout failed",
       "platform_entry": "Management Platform"
     }
@@ -25,6 +28,8 @@
   "authorization": {
     "session_invalid": "Session is invalid, please login again",
     "unauthorized": "Unauthorized",
-    "member_inactive": "Tenant member is disabled or removed"
+    "member_inactive": "Tenant is unavailable or tenant member is disabled or removed",
+    "platform_access_denied": "Management platform access has expired",
+    "realm_mismatch": "The current login context cannot access this endpoint"
   }
 }

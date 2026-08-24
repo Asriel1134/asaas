@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"slices"
 
+	"asriel.cn/asaas/server/internal/modules/iam/db/sqlc"
 	"asriel.cn/asaas/server/internal/modules/iam/service"
 	"asriel.cn/asaas/server/internal/pkg/access"
 	"asriel.cn/asaas/server/internal/platform/i18n"
@@ -15,7 +16,7 @@ import (
 )
 
 var whitelist = []string{
-	"/api/v1/login/password",
+	"/api/v1/auth/login/password",
 }
 
 func Authorization() gin.HandlerFunc {
@@ -41,27 +42,74 @@ func Authorization() gin.HandlerFunc {
 			return
 		}
 
-		if session.TenantHint.Valid {
-			if !session.MemberStatus.Valid || session.MemberStatus.TenantMemberStatus != "active" {
+		acc := access.Context{
+			UserID:    session.UserID,
+			SessionID: session.ID,
+		}
+
+		switch session.ContextType {
+		case sqlc.SessionContextTypePending:
+			if session.ContextTenantID.Valid {
+				response.Result(c, http.StatusUnauthorized, response.AuthenticationErrorCode,
+					i18n.T(lang, "authorization.session_invalid"), nil)
+				c.Abort()
+				return
+			}
+			acc.Realm = access.RealmPending
+
+		case sqlc.SessionContextTypeTenant:
+			if !session.ContextTenantID.Valid ||
+				!session.MemberStatus.Valid || session.MemberStatus.TenantMemberStatus != sqlc.TenantMemberStatusActive ||
+				!session.TenantStatus.Valid || (session.TenantStatus.TenantsStatus != sqlc.TenantsStatusActive && session.TenantStatus.TenantsStatus != sqlc.TenantsStatusReadonly) {
 				response.Result(c, http.StatusForbidden, response.AuthenticationErrorCode,
 					i18n.T(lang, "authorization.member_inactive"), nil)
 				c.Abort()
 				return
 			}
-		}
+			acc.Realm = access.RealmTenant
+			acc.TenantID = session.ContextTenantID.Bytes
+			if session.DefaultWorkspaceID.Valid {
+				acc.WorkspaceID = session.DefaultWorkspaceID.Bytes
+			}
 
-		acc := access.Context{
-			UserID:    session.UserID,
-			SessionID: session.ID,
-		}
-		if session.TenantHint.Valid {
-			acc.TenantID = session.TenantHint.Bytes
-		}
-		if session.DefaultWorkspaceID.Valid {
-			acc.WorkspaceID = session.DefaultWorkspaceID.Bytes
+		case sqlc.SessionContextTypePlatform:
+			if session.ContextTenantID.Valid {
+				response.Result(c, http.StatusUnauthorized, response.AuthenticationErrorCode,
+					i18n.T(lang, "authorization.session_invalid"), nil)
+				c.Abort()
+				return
+			}
+			isPlatformUser, platformErr := (&service.PermissionService{}).IsPlatformUser(c.Request.Context(), session.UserID)
+			if platformErr != nil || !isPlatformUser {
+				response.Result(c, http.StatusForbidden, response.AuthenticationErrorCode,
+					i18n.T(lang, "authorization.platform_access_denied"), nil)
+				c.Abort()
+				return
+			}
+			acc.Realm = access.RealmPlatform
+
+		default:
+			response.Result(c, http.StatusUnauthorized, response.AuthenticationErrorCode,
+				i18n.T(lang, "authorization.session_invalid"), nil)
+			c.Abort()
+			return
 		}
 
 		c.Request = c.Request.WithContext(access.Set(c.Request.Context(), acc))
+		c.Next()
+	}
+}
+
+func RequireRealm(realm access.Realm) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		acc, ok := access.Get(c.Request.Context())
+		if !ok || acc.Realm != realm {
+			lang := i18n.GetLanguage(c.Request.Context())
+			response.Result(c, http.StatusForbidden, response.AuthenticationErrorCode,
+				i18n.T(lang, "authorization.realm_mismatch"), nil)
+			c.Abort()
+			return
+		}
 		c.Next()
 	}
 }
